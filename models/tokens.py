@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
+
 
 class Token(BaseModel):
     access_token: str
@@ -9,6 +10,7 @@ class Token(BaseModel):
     user_id: str
     email: str
     expires_in: int
+    api_keys: Optional[Dict[str, Any]] = None 
 
 class TokenRefresh(BaseModel):
     refresh_token: str

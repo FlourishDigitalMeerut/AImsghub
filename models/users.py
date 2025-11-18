@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, validator, Field
 import re
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from .base import BaseMongoModel, PyObjectId
 
@@ -45,6 +45,23 @@ class UserResponse(BaseMongoModel):
     whatsapp_account_verified: bool
     chatbot_active: bool
     created_at: datetime
+
+class UserProfileResponse(BaseModel):
+    # Basic user info
+    user_id: str
+    email: str
+    username: str
+    mobile_number: str
+    whatsapp_account_verified: bool
+    chatbot_active: bool
+    created_at: str
+    whatsapp_marketing: Optional[Dict[str, Any]] = None
+    email_marketing: Optional[Dict[str, Any]] = None
+    sms_marketing: Optional[Dict[str, Any]] = None
+    devices: Optional[List[Dict[str, Any]]] = None
+    business_profile: Optional[Dict[str, Any]] = None
+    api_keys_info: Optional[Dict[str, Any]] = None
+    campaign_stats: Optional[Dict[str, Any]] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
