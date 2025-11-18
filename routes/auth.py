@@ -57,6 +57,13 @@ async def login(user_credentials: UserLogin):
     # Use TokenService to create both tokens
     tokens = await TokenService.create_tokens_for_user(user)
     
+    # Generate all API keys for the user
+    from services.api_key_service import APIKeyService
+    from services.database import get_api_keys_collection
+    
+    api_keys_collection = await get_api_keys_collection()
+    generated_keys = await APIKeyService.generate_all_keys_for_user(str(user["_id"]), api_keys_collection)
+    
     return {
         "message": "Login successful, Welcome!",
         "access_token": tokens["access_token"],
@@ -64,8 +71,10 @@ async def login(user_credentials: UserLogin):
         "token_type": tokens["token_type"],
         "user_id": str(user["_id"]),
         "email": user["email"],
-        "expires_in": tokens["expires_in"]
+        "expires_in": tokens["expires_in"],
+        "api_keys": generated_keys  # Add API keys to response
     }
+
 
 @router.post("/refresh", response_model=dict)
 async def refresh_token(token_data: TokenRefresh):
@@ -88,4 +97,5 @@ async def logout(refresh_token: str = None, current_user: dict = Depends(get_cur
         # Revoke all user tokens
         await TokenService.revoke_all_user_tokens(str(current_user["_id"]))
     
+
     return {"message": "Successfully logged out"}
