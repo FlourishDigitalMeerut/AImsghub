@@ -391,30 +391,32 @@ async def update_campaign(
     """Update WhatsApp campaign - requires whatsapp_marketing key"""
     campaigns_collection = await get_whatsapp_campaigns_collection()
     
-    # Validate required fields
-    if "name" not in campaign_data:
-        raise HTTPException(status_code=400, detail="Campaign name is required")
+    # Check if campaign exists and belongs to user
+    existing_campaign = await campaigns_collection.find_one(
+        {"_id": ObjectId(campaign_id), "user_id": current_user["_id"]}
+    )
     
-    if "type" not in campaign_data:
-        raise HTTPException(status_code=400, detail="Campaign type is required")
+    if not existing_campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
-    # Build update fields - only include fields that are provided
+    # Build update fields - all fields are optional
     update_fields = {
-        "name": campaign_data["name"],
-        "type": campaign_data["type"],
         "updated_at": datetime.now(timezone.utc)
     }
     
-    # Optional fields - only update if provided
+    # All fields are optional - only update if provided
     optional_fields = [
-        "status", "message_type", "message_content", 
-        "media_url", "caption", "contacts",
-        "sent_count", "failed_count"
+        "name", "type", "status", "message_type", "message_content", 
+        "media_url", "caption", "contacts", "sent_count", "failed_count"
     ]
     
     for field in optional_fields:
         if field in campaign_data:
             update_fields[field] = campaign_data[field]
+    
+    # Check if any fields were actually provided to update
+    if len(update_fields) == 1:  # Only has updated_at
+        raise HTTPException(status_code=400, detail="No fields provided for update")
     
     result = await campaigns_collection.update_one(
         {"_id": ObjectId(campaign_id), "user_id": current_user["_id"]},
@@ -422,7 +424,7 @@ async def update_campaign(
     )
     
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Campaign not found or no changes made")
+        raise HTTPException(status_code=400, detail="No changes made to campaign")
     
     return {"success": True, "message": "Campaign updated successfully"}
 
@@ -713,6 +715,25 @@ async def send_bulk_message(
 ):
     """Send bulk WhatsApp messages with only Template and AI options - requires whatsapp_marketing key"""
     
+    # ==================== META CREDENTIALS VALIDATION ====================
+    if not current_user.get('meta_api_key'):
+        raise HTTPException(
+            status_code=400, 
+            detail="Meta API credentials not found. Please connect your WhatsApp Business account first."
+        )
+    
+    if not current_user.get('phone_number_id'):
+        raise HTTPException(
+            status_code=400, 
+            detail="WhatsApp Business Phone Number ID not found. Please connect your WhatsApp Business account first."
+        )
+    
+    if not current_user.get('whatsapp_account_verified'):
+        raise HTTPException(
+            status_code=400, 
+            detail="WhatsApp Business account not verified. Please complete the verification process."
+        )
+    
     # Extract common fields
     contacts = message_data.get("contacts", [])
     excel_file_data = message_data.get("excel_contacts", [])  
@@ -735,10 +756,38 @@ async def send_bulk_message(
     if not campaign_name:
         raise HTTPException(status_code=400, detail="Campaign name is required")
     
-    # ==================== NEW: INSTANCE IS NOW COMPULSORY ====================
+    # ==================== INSTANCE IS NOW COMPULSORY ====================
     instance_id = message_data.get("instance_id")
     if not instance_id:
         raise HTTPException(status_code=400, detail="Instance ID is required for sending messages")
+    
+    # ==================== VALIDATE INSTANCE ACCESS ====================
+    try:
+        devices_collection = await get_devices_collection()
+        device = await devices_collection.find_one({
+            "_id": ObjectId(instance_id), 
+            "user_id": current_user["_id"]
+        })
+        
+        if not device:
+            raise HTTPException(
+                status_code=404, 
+                detail="Instance not found or you don't have access to this instance"
+            )
+        
+        if device.get("status") != "active":
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Instance is not active. Current status: {device.get('status', 'unknown')}"
+            )
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid instance ID format"
+        )
     
     # Determine message source: template or AI-generated
     message_source = message_data.get("message_source")
@@ -783,6 +832,21 @@ async def send_bulk_message(
     
     if not validated_contacts:
         raise HTTPException(status_code=400, detail="No valid contact numbers found")
+    
+    # ==================== VALIDATE CONTACT NUMBERS FORMAT ====================
+    for contact in validated_contacts:
+        number = contact["number"]
+        # Basic validation for phone number format
+        if not number.replace('+', '').replace(' ', '').isdigit():
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid phone number format: {number}. Phone numbers should contain only digits and optional '+' prefix."
+            )
+        if len(number) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Phone number too short: {number}. Please provide complete phone numbers with country code."
+            )
     
     # ==================== SAVE CONTACTS TO SEPARATE TABLE ====================
     try:
@@ -907,6 +971,35 @@ async def send_bulk_message(
     
     if message_type in ["Text with Media", "Media"] and not media_url:
         raise HTTPException(status_code=400, detail="Media URL is required for media messages")
+    
+    # ==================== VALIDATE META API CONNECTION ====================
+    try:
+        # Test Meta API connection with a simple request
+        test_url = f"https://graph.facebook.com/v19.0/{current_user['phone_number_id']}"
+        headers = {"Authorization": f"Bearer {current_user['meta_api_key']}"}
+        
+        test_response = requests.get(test_url, headers=headers)
+        if test_response.status_code == 401:
+            raise HTTPException(
+                status_code=400,
+                detail="Meta API token is invalid or expired. Please reconnect your WhatsApp Business account."
+            )
+        elif test_response.status_code == 403:
+            raise HTTPException(
+                status_code=400,
+                detail="Access denied to Meta API. Please check your permissions and reconnect your account."
+            )
+        elif test_response.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Meta API connection failed with status {test_response.status_code}. Please check your WhatsApp Business account setup."
+            )
+            
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to connect to Meta API: {str(e)}. Please check your internet connection and try again."
+        )
     
     # ==================== MESSAGE LOGGING COLLECTION ====================
     message_logs_collection = await get_whatsapp_message_logs_collection()

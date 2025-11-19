@@ -23,5 +23,4 @@ class RefreshTokenDB(BaseModel):
     refresh_token: str
     created_at: datetime
     expires_at: datetime
-
     is_revoked: bool = False

@@ -70,14 +70,36 @@ async def get_refresh_tokens_collection():
     return db.refresh_tokens
 
 async def get_knowledge_base_collection():
-    """Get knowledge base documents collection"""
     from services.database import mongodb
     return mongodb.db.knowledge_base_documents
 
 async def get_devices_collection():
-    """Get devices collection for instance mapping"""
     db = await get_database()
     return db.devices
+
+async def get_whatsapp_campaigns_collection():
+    db = await get_database()
+    return db.whatsapp_campaigns
+
+async def get_whatsapp_auto_replies_collection():
+    db = await get_database()
+    return db.whatsapp_auto_replies
+
+async def get_whatsapp_templates_collection():
+    db = await get_database()
+    return db.whatsapp_templates
+
+async def get_whatsapp_contacts_collection():
+    db = await get_database()
+    return db.whatsapp_contacts
+
+async def get_whatsapp_message_logs_collection():
+    db = await get_database()
+    return db.whatsapp_message_logs
+
+async def get_sms_campaigns_collection():
+    db = await get_database()
+    return db.sms_campaigns
 
 @asynccontextmanager
 async def lifespan_manager(app: FastAPI):

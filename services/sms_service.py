@@ -1,4 +1,4 @@
-# sms_service.py
+
 import logging
 from services.database import get_sms_users_collection, get_sms_logs_collection
 from config import twilio_client
