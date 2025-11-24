@@ -58,14 +58,14 @@ async def whatsapp_connect(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Meta app configuration missing")
 
     scopes = [
-        "whatsapp_business_management",
-        "whatsapp_business_messaging",
-        "business_management"
+        "whatsapp_business_management"
+        # "whatsapp_business_messaging",
+        # "business_management"
     ]
     scope_param = "%2C".join(scopes)
 
     signup_url = (
-        f"https://www.facebook.com/v19.0/dialog/oauth"
+        f"https://www.facebook.com/v23.0/dialog/oauth"
         f"?client_id={META_APP_ID}"
         f"&redirect_uri={META_REDIRECT_URI}"
         f"&scope={scope_param}"
